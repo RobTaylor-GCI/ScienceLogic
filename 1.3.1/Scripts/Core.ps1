@@ -177,7 +177,10 @@ function Find-EM7Object {
         # to a related object to automatically retrieve and place in the 
         # returned object.
         [Parameter()]
-        [String[]]$ExpandProperty
+        [String[]]$ExpandProperty,
+
+        [Parameter()]
+        [switch]$CountOnly
 
     )
 
@@ -206,13 +209,16 @@ function Find-EM7Object {
 
         do {
 
+            $oldHFI=$Globals.HideFilterInfo
+            $Globals.HideFilterInfo=0
             $URI = CreateUri @UriArgs
-        
+            $Globals.HideFilterInfo=$oldHFI
             $Response = HttpInvoke $URI
         
             $TotalMatched = $Response.total_matched -as [Int32]
             $TotalReturned = $Response.total_returned -as [Int32]
-
+            $Response=$Response.result_set
+            if ($CountOnly) { return($TotalMatched) }
             $Result = @($Response | UnrollArray)
             if ($ExpandProperty.Length) {
                 $Cache = @{}
