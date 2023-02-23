@@ -137,9 +137,8 @@ function Get-EM7Object {
 # Queries the specified resource index for resources matching an optional
 # filter specification.
 ##############################################################################
-function Find-EM7Object {
+function Get-EM7ObjectList {
 
-    [Alias('fslo')]
     [CmdletBinding()]
     param(
 
@@ -147,17 +146,10 @@ function Find-EM7Object {
         # See the documentation for value values.
         # Examples include, device, device_group, organization, account...
         [Parameter(Position=0, Mandatory=$true)]
-        [String]$Resource,
-
-        # If specifieed, the keys of this hashtable are prefixed with
-        # 'filter.' and used as filters. For example: @{organization=6}
-        [Parameter()]
-        [Hashtable]$Filter = @{},
-
+        [String]$URI,
         # Limits the results to the specified number. The default is 1000.
         [Parameter()]
         [Int32]$Limit = $Globals.DefaultLimit,
-
         # The starting offset in the results to return.
         # If retrieving objects in pages of 100, you would specify 0 for page 1,
         # 100 for page 2, 200 for page 3, and so on.
@@ -171,82 +163,66 @@ function Find-EM7Object {
         # results are paginated when there are more results than fit in a
         # single page.
         [Parameter()]
-        [String]$OrderBy,
-
-        # Specifies one or more property names that ordinarily contain a link
-        # to a related object to automatically retrieve and place in the 
-        # returned object.
-        [Parameter()]
-        [String[]]$ExpandProperty,
-
+        [String]$OrderBy
         [Parameter()]
         [switch]$CountOnly
 
     )
 
     begin {
-    
         EnsureConnected -ErrorAction Stop
-
     }
 
     process {
 
-        $UriArgs = @{
-            Resource = $Resource
-            Filter = $Filter
-            Limit = $Limit
-            Offset = $Offset
-            Extended = $true
-            OrderBy = $OrderBy
-        }
+        if ($URI -match "^(?<t>/api/)(?<r>.*)$")
+        {
 
-        if ($UriArgs.Limit -gt $Globals.DefaultPageSize) {
-            $UriArgs.Limit = $Globals.DefaultPageSize
-        }
+            if ($UriArgs.Limit -gt $Globals.DefaultPageSize) {
+                $UriArgs.Limit = $Globals.DefaultPageSize
+            }
+            $OutputCount = 0
+            $RLimit=$Limit
+            $ROffset=$Offset
+            do {
 
-        $OutputCount = 0
-
-        do {
-
-            $oldHFI=$Globals.HideFilterInfo
-            $Globals.HideFilterInfo=0
-            $URI = CreateUri @UriArgs
-            $Globals.HideFilterInfo=$oldHFI
-            $Response = HttpInvoke $URI
+                $Query = @{}
+                if ($Globals.HideFilterInfo) { $Query['hide_filterinfo'] = $Globals.HideFilterInfo }
+                if ($RLimit) { $Query['limit'] = $RLimit }
+                if ($ROffset) { $Query['offset'] = $ROffset }
+                if ($OrderBy) {
+                    if ($OrderBy -like '-*') { $Query["order.$($OrderBy.Substring(1))"] = 'DESC' }
+                    else { $Query["order.$OrderBy"] = 'ASC' }
+                }
+                $RURI = %New-Uri $Matches.r -BaseUri $Globals.ApiRoot -QueryString $Query
+                $Response = HttpInvoke $RURI
         
-            $TotalMatched = $Response.total_matched -as [Int32]
-            $TotalReturned = $Response.total_returned -as [Int32]
-            $Response=$Response.result_set
-            if ($CountOnly) { return($TotalMatched) }
-            $Result = @($Response | UnrollArray)
-            if ($ExpandProperty.Length) {
-                $Cache = @{}
-                foreach ($Obj in $Result) {
-                    ExpandProperty $Obj $ExpandProperty -Cache:$Cache
+                $TotalMatched = $Response.total_matched -as [Int32]
+                $TotalReturned = $Response.total_returned -as [Int32]
+                $Response=$Response.result_set
+                if ($CountOnly) { return($TotalMatched) }
+                $Result = @($Response | UnrollArray)
+                if ($Result.Length)
+                {
+                    Write-Output $Result
+                    $OutputCount += $Result.Length
+                    $ROffset += $Result.Length
+
+                    if ($ROffset + $RLimit -gt $Limit)
+                    {
+                        $RLimit = $Limit - $ROffset
+                    }
+
                 }
-            }
-
-            if ($Result.Length) {
-            
-                Write-Output $Result
-
-                $OutputCount += $Result.Length
-                $UriArgs.Offset += $Result.Length
-
-                if ($UriArgs.Offset + $UriArgs.Limit -gt $Limit) {
-                    $UriArgs.Limit = $Limit - $UriArgs.Offset
+                else
+                {
+                    break
                 }
 
-            }
-            else {
-                break
-            }
+            } while ($OutputCount -lt $Limit -and $OutputCount -lt $TotalMatched);
 
-        } while ($OutputCount -lt $Limit -and $OutputCount -lt $TotalMatched);
-
+        }
     }
-
 }
 
 ##############################################################################

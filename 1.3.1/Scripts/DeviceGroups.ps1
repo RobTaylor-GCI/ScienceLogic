@@ -368,7 +368,7 @@ function Get-EM7DeviceGroupMembership {
 	begin {
 
 		$ProgID = Get-Random -Minimum 100000
-		Write-Progress "Loading device groups..." -Id:$ProgID
+		Write-GanProgress "Loading device groups..." -Id:$ProgID
 
 		$Cache = @{}
 		$DeviceGroupCache = @(Get-Em7DeviceGroup -Limit 999999 -Cache:$Cache)
@@ -377,7 +377,7 @@ function Get-EM7DeviceGroupMembership {
 			$DeviceGroup.deviceCount = $DeviceGroup.devices.Count
 		}
 
-		Write-Progress "Done" -Id:$ProgID -Completed
+		Write-GanProgress "Done" -Id:$ProgID -Completed
 
 	}
 
